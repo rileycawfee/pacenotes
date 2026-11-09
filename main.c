@@ -1,20 +1,20 @@
-/* Rally Pace Notes - Milestone 1
-   A stage is just a text file: stage_NAME.txt, with one note per line (like "LEFT 3"). */
+// Rally Pace Notes - Milestone 1
 
-#include <dirent.h>
+
+#include <dirent.h> // opendir/readdir lets list_stages() look through the folder for saved stages
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <unistd.h>
+#include <unistd.h> // checks if running in a terminal window
 #ifdef _WIN32
-#include <conio.h>
+#include <conio.h> // used for _getch() on windows
 #endif
 
-#define MAX 500
-#define LEN 16
+#define MAX 500 // max amount of notes one stage can hold
+#define LEN 16 // chars reserved for one note's text
 
-char notes[MAX][LEN];   /* the notes of the stage being used */
+char notes[MAX][LEN];  // the notes of the stage being used 
 int count = 0;
 
 int read_line(char *buf, int size) {
@@ -27,8 +27,8 @@ int is_back(const char *s) {
     return (s[0] == 'b' || s[0] == 'B') && s[1] == '\0';
 }
 
-/* Turns "L3" or "Left 3" into "LEFT 3", and a plain number like "150" into "STRAIGHT 150".
-   Returns 1 if valid, 0 if not. */
+// turns short hand into typed out, ex. "L3" into "LEFT 3", and a number on it's own like 
+// "250" turns into "STRAIGHT 150". returns 1 if valid, and 0 if invalid.
 int parse_note(const char *text, char *out) {
     char word[16], extra;
     int num, i;
@@ -37,21 +37,30 @@ int parse_note(const char *text, char *out) {
         sprintf(out, "STRAIGHT %d", num);
         return 1;
     }
-    if (sscanf(text, " %15[A-Za-z] %d %c", word, &num, &extra) != 2) return 0;
-    if (num < 1 || num > 6) return 0;
+    
+    if (sscanf(text, " %15[A-Za-z] %d %c", word, &num, &extra) != 2) 
+        return 0;
     for (i = 0; word[i]; i++) word[i] = tolower((unsigned char)word[i]);
 
-    if (strcmp(word, "l") == 0 || strcmp(word, "left") == 0) {
+    if (strcmp(word, "straight") == 0 && num > 0 && num <= 9999) {
+        sprintf(out, "STRAIGHT %d", num);
+    } 
+    else if (num < 1 || num > 6) {
+        return 0;
+    } 
+    else if (strcmp(word, "l") == 0 || strcmp(word, "left") == 0) {
         sprintf(out, "LEFT %d", num);
-    } else if (strcmp(word, "r") == 0 || strcmp(word, "right") == 0) {
+    } 
+    else if (strcmp(word, "r") == 0 || strcmp(word, "right") == 0) {
         sprintf(out, "RIGHT %d", num);
-    } else {
+    } 
+    else {
         return 0;
     }
     return 1;
 }
 
-/* Loads the stage file NAME.txt into notes[]. Returns 0 if the stage doesn't exist. */
+//loads the stage file NAME.txt into notes array. If stage doesn't exist; returns 0
 int load(const char *name) {
     char path[100], line[100];
     FILE *f;
@@ -61,13 +70,14 @@ int load(const char *name) {
     f = fopen(path, "r");
     if (f == NULL) return 0;
     while (count < MAX && fgets(line, sizeof(line), f) != NULL) {
-        if (parse_note(line, notes[count])) count++;
+        if (parse_note(line, notes[count])) 
+            count++;
     }
     fclose(f);
     return 1;
 }
 
-/* Saves notes[] to NAME.txt. */
+//saves notes array to NAME.txt
 void save(const char *name) {
     char path[100];
     FILE *f;
@@ -83,13 +93,14 @@ void save(const char *name) {
     fclose(f);
 }
 
-/* Prints the saved stages (the files named stage_NAME.txt). */
+// prints the saved stages
 void list_stages(void) {
     DIR *d = opendir(".");
     struct dirent *e;
     int len, found = 0;
 
-    if (d == NULL) return;
+    if (d == NULL) 
+        return;
     printf("Saved stages:\n");
     while ((e = readdir(d)) != NULL) {
         len = strlen(e->d_name);
@@ -102,35 +113,38 @@ void list_stages(void) {
     if (found == 0) printf("  (none yet)\n");
 }
 
-/* Asks for a stage name. Returns 0 if the user went back. */
+// asks the user for a stage name
 int ask_stage(char *name) {
     list_stages();
     while (1) {
         printf("Stage name (B to go back): ");
-        if (!read_line(name, 64) || is_back(name)) return 0;
-        if (name[0] != '\0' && strpbrk(name, "/\\:*?\"<>|.") == NULL) return 1;
-        printf("Please type a name without / \\ : * ? \" < > | or dots.\n");
+        if (!read_line(name, 64) || is_back(name)) 
+            return 0;
+        if (name[0] != '\0' && strpbrk(name, "/\\:*?\"<>|.") == NULL)
+             return 1;
+        printf("Type a name without / \\ : * ? \" < > | or dots.\n");
     }
 }
 
-/* Waits for one key. If the terminal can't send single keys, the user types it and presses Enter. */
+// Waits for one key press - if the certain terminal can't send single keys, the user types the key and the program presses enter.
 int get_key(void) {
     char line[100];
 
 #ifdef _WIN32
-    if (isatty(0)) return _getch();
+    if (isatty(0)) 
+        return _getch();
 #endif
     if (!read_line(line, sizeof(line))) return 27;
-    return line[0] == '\0' ? ' ' : line[0];
+        return line[0] == '\0' ? ' ' : line[0];
 }
 
 void show_help(void) {
     char line[100];
 
-    printf("\n--- HELP (optional) ---\n");
-    printf("Notes can be typed short or long: L3   L 3   left 3   R5   right 5\n");
-    printf("The number is 1 (tightest, like a hairpin) to 6 (slight bend).\n");
-    printf("A plain number is a straight: type 150 for STRAIGHT 150.\n");
+    printf("\n## Help ##\n");
+    printf("Notes can be typed short or long, ex. L3   L 3   left 3   R5   right 5\n");
+    printf("The lower the number the tighter the turn (nums 1-6).\n");
+    printf("A number on its own is a straight, ex. 150 for STRAIGHT 150.\n");
     printf("Type B and press Enter to go back. Notes are saved as .txt files in this folder.\n");
     printf("Press Enter to return: ");
     read_line(line, sizeof(line));
@@ -139,10 +153,10 @@ void show_help(void) {
 void create_view(void) {
     char name[64], line[100], note[LEN];
 
-    printf("\n--- CREATE ---\n");
+    printf("\n## Create ##\n");
     printf("Type pace notes and they are saved to a stage (a text file in this folder).\n");
     printf("Steps:\n  1. Type a stage name\n  2. Type a note like L3, Left 3, or 150 (a 150 straight) and press Enter\n  3. Type B to finish\n");
-    printf("Mistake? Type undo to remove the last note.\n\n");
+    printf("Type undo to remove the last note.\n\n");
     if (!ask_stage(name)) return;
     load(name);
 
@@ -151,23 +165,25 @@ void create_view(void) {
         if (!read_line(line, sizeof(line)) || is_back(line)) return;
 
         if (tolower((unsigned char)line[0]) == 'u') {
-            if (count == 0) {
+            if (count == 0) 
                 printf("Nothing to undo.\n");
-            } else {
+            else {
                 printf("Removed %s.\n", notes[--count]);
                 save(name);
             }
-        } else if (parse_note(line, note)) {
+        } 
+        else if (parse_note(line, note)) {
             if (count < MAX) {
                 strcpy(notes[count++], note);
                 save(name);
                 printf("Saved %s.\n", note);
-            } else {
+            } 
+            else {
                 printf("This stage is full.\n");
             }
-        } else {
+        } 
+        else 
             printf("Could not read that. Try L3, Left 3 (1 to 6), or 150 for a straight.\n");
-        }
     }
 }
 
@@ -175,9 +191,10 @@ void display_view(void) {
     char name[64];
     int i = -1, key, k;
 
-    printf("\n--- DISPLAY ---\n");
+    printf("\n## Display ##\n");
     printf("Shows one pace note at a time in large text, so you can read it while driving.\n");
-    if (!ask_stage(name)) return;
+    if (!ask_stage(name)) 
+        return;
     if (!load(name)) {
         printf("There is no stage called \"%s\". Create it or import it first.\n", name);
         return;
@@ -216,7 +233,7 @@ void import_view(void) {
     int n = 0, bad = 0, i;
     FILE *f;
 
-    printf("\n--- IMPORT ---\n");
+    printf("\n## Import ##\n");
     printf("Load pace notes from a .txt file, one note per line (L3 and Left 3 both work).\n");
     printf("Cost: nothing is deleted. The notes go into a NEW stage; your other stages are not changed.\n");
     printf("Steps:\n  1. Type the file name\n  2. Type a name for the new stage\n  3. Check the count and answer Y\n");
@@ -235,7 +252,8 @@ void import_view(void) {
         if (line[0] == '\0') continue;
         if (n < MAX && parse_note(line, found[n])) {
             n++;
-        } else {
+        } 
+        else {
             bad++;
             printf("Skipped: \"%s\"\n", line);
         }
@@ -268,7 +286,7 @@ int main(void) {
     char c;
 
     while (1) {
-        printf("\n=== RALLY PACE NOTES ===\n");
+        printf("\n## RALLY PACE NOTES ##\n");
         printf("Make pace notes and read them back one at a time.\n");
         printf("Works offline. Nothing leaves your computer.\n\n");
         printf("1. Create   type pace notes and save them to a stage\n");
@@ -281,19 +299,24 @@ int main(void) {
 
         if (c == '1' || c == 'c') {
             create_view();
-        } else if (c == '2' || c == 'd') {
+        } 
+        else if (c == '2' || c == 'd') {
             display_view();
-        } else if (c == '3' || c == 'i') {
+        } 
+        else if (c == '3' || c == 'i') {
             import_view();
-        } else if (c == '?' || c == 'h') {
+        } 
+        else if (c == '?' || c == 'h') {
             show_help();
-        } else if (c == 'q') {
-            printf("Quit? Your notes are already saved. (Y/N): ");
-            if (read_line(line, sizeof(line)) && tolower((unsigned char)line[0]) == 'y') break;
-        } else {
+        } 
+        else if (c == 'q') {
+            printf("Quit? Your notes are saved. (Y/N): ");
+            if (read_line(line, sizeof(line)) && tolower((unsigned char)line[0]) == 'y') 
+                break;
+        } 
+        else {
             printf("Please type 1, 2, 3, ? or Q.\n");
         }
     }
-    printf("Goodbye.\n");
     return 0;
 }
