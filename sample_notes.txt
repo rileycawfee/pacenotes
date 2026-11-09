@@ -1,0 +1,20 @@
+R2
+L3
+Right 4
+L5
+R6
+Left 1
+R2
+L3
+Right 4
+L5
+R6
+Left 1
+R2
+L3
+Right 4
+L5
+R6
+Left 1
+R2
+L3

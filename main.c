@@ -1,6 +1,7 @@
 /* Rally Pace Notes - Milestone 1
-   A stage is just a text file: NAME.txt, with one note per line (like "LEFT 3"). */
+   A stage is just a text file: stage_NAME.txt, with one note per line (like "LEFT 3"). */
 
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,11 +27,16 @@ int is_back(const char *s) {
     return (s[0] == 'b' || s[0] == 'B') && s[1] == '\0';
 }
 
-/* Turns "L3" or "Left 3" into "LEFT 3". Returns 1 if valid, 0 if not. */
+/* Turns "L3" or "Left 3" into "LEFT 3", and a plain number like "150" into "STRAIGHT 150".
+   Returns 1 if valid, 0 if not. */
 int parse_note(const char *text, char *out) {
     char word[16], extra;
     int num, i;
 
+    if (sscanf(text, " %d %c", &num, &extra) == 1 && num > 0 && num <= 9999) {
+        sprintf(out, "STRAIGHT %d", num);
+        return 1;
+    }
     if (sscanf(text, " %15[A-Za-z] %d %c", word, &num, &extra) != 2) return 0;
     if (num < 1 || num > 6) return 0;
     for (i = 0; word[i]; i++) word[i] = tolower((unsigned char)word[i]);
@@ -51,7 +57,7 @@ int load(const char *name) {
     FILE *f;
 
     count = 0;
-    snprintf(path, sizeof(path), "%s.txt", name);
+    snprintf(path, sizeof(path), "stage_%s.txt", name);
     f = fopen(path, "r");
     if (f == NULL) return 0;
     while (count < MAX && fgets(line, sizeof(line), f) != NULL) {
@@ -67,7 +73,7 @@ void save(const char *name) {
     FILE *f;
     int i;
 
-    snprintf(path, sizeof(path), "%s.txt", name);
+    snprintf(path, sizeof(path), "stage_%s.txt", name);
     f = fopen(path, "w");
     if (f == NULL) {
         printf("Could not save %s\n", path);
@@ -77,8 +83,28 @@ void save(const char *name) {
     fclose(f);
 }
 
+/* Prints the saved stages (the files named stage_NAME.txt). */
+void list_stages(void) {
+    DIR *d = opendir(".");
+    struct dirent *e;
+    int len, found = 0;
+
+    if (d == NULL) return;
+    printf("Saved stages:\n");
+    while ((e = readdir(d)) != NULL) {
+        len = strlen(e->d_name);
+        if (len > 10 && strncmp(e->d_name, "stage_", 6) == 0 && strcmp(e->d_name + len - 4, ".txt") == 0) {
+            printf("  - %.*s\n", len - 10, e->d_name + 6);
+            found++;
+        }
+    }
+    closedir(d);
+    if (found == 0) printf("  (none yet)\n");
+}
+
 /* Asks for a stage name. Returns 0 if the user went back. */
 int ask_stage(char *name) {
+    list_stages();
     while (1) {
         printf("Stage name (B to go back): ");
         if (!read_line(name, 64) || is_back(name)) return 0;
@@ -104,6 +130,7 @@ void show_help(void) {
     printf("\n--- HELP (optional) ---\n");
     printf("Notes can be typed short or long: L3   L 3   left 3   R5   right 5\n");
     printf("The number is 1 (tightest, like a hairpin) to 6 (slight bend).\n");
+    printf("A plain number is a straight: type 150 for STRAIGHT 150.\n");
     printf("Type B and press Enter to go back. Notes are saved as .txt files in this folder.\n");
     printf("Press Enter to return: ");
     read_line(line, sizeof(line));
@@ -114,7 +141,7 @@ void create_view(void) {
 
     printf("\n--- CREATE ---\n");
     printf("Type pace notes and they are saved to a stage (a text file in this folder).\n");
-    printf("Steps:\n  1. Type a stage name\n  2. Type a note like L3 or Left 3 and press Enter\n  3. Type B to finish\n");
+    printf("Steps:\n  1. Type a stage name\n  2. Type a note like L3, Left 3, or 150 (a 150 straight) and press Enter\n  3. Type B to finish\n");
     printf("Mistake? Type undo to remove the last note.\n\n");
     if (!ask_stage(name)) return;
     load(name);
@@ -139,7 +166,7 @@ void create_view(void) {
                 printf("This stage is full.\n");
             }
         } else {
-            printf("Could not read that. Try L3 or Left 3 (numbers 1 to 6).\n");
+            printf("Could not read that. Try L3, Left 3 (1 to 6), or 150 for a straight.\n");
         }
     }
 }
@@ -191,8 +218,8 @@ void import_view(void) {
 
     printf("\n--- IMPORT ---\n");
     printf("Load pace notes from a .txt file, one note per line (L3 and Left 3 both work).\n");
-    printf("Cost: nothing is deleted. Imported notes are added to the end of the stage.\n");
-    printf("Steps:\n  1. Type the file name\n  2. Type the stage name\n  3. Check the count and answer Y\n");
+    printf("Cost: nothing is deleted. The notes go into a NEW stage; your other stages are not changed.\n");
+    printf("Steps:\n  1. Type the file name\n  2. Type a name for the new stage\n  3. Check the count and answer Y\n");
     printf("No file? Type B, then use Create to type notes by hand.\n");
 
     while (1) {
@@ -219,17 +246,21 @@ void import_view(void) {
         printf("No readable notes in that file. Nothing was changed.\n");
         return;
     }
-    if (!ask_stage(name)) return;
-    load(name);
+    while (1) {
+        if (!ask_stage(name)) return;
+        if (!load(name)) break;
+        printf("A stage called \"%s\" already exists. Pick a new name.\n", name);
+    }
 
-    printf("%d notes found, %d lines skipped. Add them to \"%s\"? (Y/N): ", n, bad, name);
+    printf("%d notes found, %d lines skipped. Create stage \"%s\" with them? (Y/N): ", n, bad, name);
     if (!read_line(line, sizeof(line)) || tolower((unsigned char)line[0]) != 'y') {
         printf("Cancelled. Nothing was changed.\n");
         return;
     }
-    for (i = 0; i < n && count < MAX; i++) strcpy(notes[count++], found[i]);
+    count = 0;
+    for (i = 0; i < n; i++) strcpy(notes[count++], found[i]);
     save(name);
-    printf("Imported. \"%s\" now has %d notes.\n", name, count);
+    printf("Imported. New stage \"%s\" has %d notes.\n", name, count);
 }
 
 int main(void) {
